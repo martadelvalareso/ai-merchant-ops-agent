@@ -1,0 +1,124 @@
+{
+  "name": "Optimized Merchant Requests",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "af4d77c2-6084-46dc-a0f1-35c3019330fa",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "documentId": "REDACTED",
+        "sheetName": "merchant_requests"
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [208, 0],
+      "id": "788e2947-52e8-447b-a60f-06daf0e3b48e",
+      "name": "Get Merchant Requests"
+    },
+    {
+      "parameters": {
+        "modelId": "gpt-4.1-mini",
+        "responses": {
+          "values": [
+            {
+              "content": "You are an operations assistant for a marketplace. Analyze the merchant request and return structured JSON with priority, decision, action, and response_draft. Apply business rules based on merchant tier, churn risk, and request type. Always preserve original fields."
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [800, 0],
+      "id": "86bb07c8-9918-4d15-88c6-25272680e731",
+      "name": "LLM Classification"
+    },
+    {
+      "parameters": {
+        "maxItems": 40,
+        "keep": "lastItems"
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [624, 0],
+      "id": "21619260-427d-492a-b42f-f40588a9bff3",
+      "name": "Limit Batch"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse LLM JSON output safely\nconst raw = $json.output?.[0]?.content?.[0]?.text || '{}';\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  parsed = { decision: 'review', priority: 'Medium' };\n}\nreturn { json: { ...parsed } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1152, 0],
+      "id": "36be799d-8d35-4ac1-b3a3-241204b9254a",
+      "name": "Parse LLM Output"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Business logic layer\nconst churnRisk = Number($json.churn_risk_clean || 0);\nconst isHighValue = $json.merchant_tier === 'platinum';\nconst isHighRisk = churnRisk > 0.6;\nlet decision = $json.decision;\n\nif (isHighValue && isHighRisk && $json.request_type === 'billing_dispute') {\n  decision = 'escalate';\n}\n\nlet priority = isHighValue || isHighRisk ? 'High' : (decision === 'auto_resolve' ? 'Low' : 'Medium');\n\nreturn {\n  json: {\n    ...$json,\n    decision,\n    priority\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1376, 0],
+      "id": "926b35fb-d76f-4dd6-a8d5-78446587dbe4",
+      "name": "Business Logic Layer"
+    },
+    {
+      "parameters": {
+        "type": "code",
+        "code": "const order = { High: 3, Medium: 2, Low: 1 };\nreturn order[b.json.priority] - order[a.json.priority];"
+      },
+      "type": "n8n-nodes-base.sort",
+      "typeVersion": 1,
+      "position": [1568, 0],
+      "id": "db64d30d-f9f9-4eb2-99ee-a78e4c4173aa",
+      "name": "Sort by Priority"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "REDACTED",
+        "sheetName": "actions"
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1776, 0],
+      "id": "5f4d5379-d964-4f24-951d-5ae64214cd74",
+      "name": "Write Output"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Get Merchant Requests", "type": "main", "index": 0 }]]
+    },
+    "Get Merchant Requests": {
+      "main": [[{ "node": "Limit Batch", "type": "main", "index": 0 }]]
+    },
+    "Limit Batch": {
+      "main": [[{ "node": "LLM Classification", "type": "main", "index": 0 }]]
+    },
+    "LLM Classification": {
+      "main": [[{ "node": "Parse LLM Output", "type": "main", "index": 0 }]]
+    },
+    "Parse LLM Output": {
+      "main": [[{ "node": "Business Logic Layer", "type": "main", "index": 0 }]]
+    },
+    "Business Logic Layer": {
+      "main": [[{ "node": "Sort by Priority", "type": "main", "index": 0 }]]
+    },
+    "Sort by Priority": {
+      "main": [[{ "node": "Write Output", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
