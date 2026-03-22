@@ -1,5 +1,5 @@
 # ai-merchant-ops-agent
-AI-powered merchant operations triage and action agent (n8n workflow)
+AI-powered agent for automating merchant operations (triage, prioritization, and resolution)
 AI Merchant Operations Agent (n8n)
 
 Overview
